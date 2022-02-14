@@ -1,0 +1,561 @@
+---
+title: "Liver Disease Classification using Machine Learning \nEDX Data Science - Capstone Project "
+author: "Muditha Hapudeniya"
+date: "2/12/2022"
+output:
+  pdf_document: 
+    toc: true
+    toc_depth: 3
+  html_document: 
+  word_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+------------------------------------------------------------------------
+
+## Introduction
+
+The liver is one of the major organs in the human body. It performs many essential biological functions and detoxification necessary for digestion and growth. The liver is located in the right upper quadrant of the abdomen below the diaphragm. The liver produces bile which breakdown fat. The liver's highly specialized tissue, consisting of primarily hepatocytes, regulates a wide variety of biochemical reactions. When the liver cells are damaged, some of the chemicals such as bilirubin, AGOT, and SGPT produced by the liver can be detected in the blood.
+
+Signs and symptoms of liver damage do not appear until the final stages of the disease. Therefore it is vital to identify the liver damage early and start the treatment early. Biochemical changes of liver damage can be detected in blood in the early stages. These tests are called liver function tests which measure blood levels of Total bilirubin, Alanine transaminase (ALT), Aspartate transaminase (AST), AST/ALT ratio, Alkaline phosphatase (ALP), Gamma-glutamyltransferase (GGT) and Albumin.
+
+Machine learning techniques can be used to identify patients who has a risk of developing liver disease and provide appropriate treatment earlier. The UCL Machine Learning Repository has published a data set on Indian Liver patients for researchers to test their machine learning models to accurately classify the liver disease patients (1).
+
+This data set contains information on 583 Indian liver patients; out of them, 416 are liver patient records, and 167 are non-liver patient records. The data set was collected from the northeast of Andhra Pradesh, India.
+
+The data set contains the following information.
+
+1. Age of the patient
+2. Gender of the patient
+3. Total Bilirubin
+4. Direct Bilirubin
+5. Alkphos Alkaline Phosphatase
+6. Alamine Aminotransferase
+7. Aspartate Aminotransferase
+8. Total Proteins
+9. Albumin
+10. Albumin and Globulin Ratio
+11. Presence of the disease
+
+Since this is a publicly available data set, many researchers have used the data set to learn machine learning and test their models. I have found research articles where people have applied models such as Naïve Bayesian classifier, Support Vector Machines (SVM), K Nearest Neighbor (KNN) and artificial neural networks (ANN) and random forest methods. This data set is also popular in Kaggle. Most people have used Python language to build models rather than R. Since I am from a medical background, this data set made me interested in applying machine learning methods to classify the data set.
+
+### Evaluating the models
+
+There are many metrics that can be used to measure the performance of a classifier or predictor. Here I have a binary classification problem, i.e. to classify the patients in two groups - with disease and without the condition. Most commonly, researchers have used measures such as Accuracy, Sensitivity, Precision and Specificity to evaluate the model.
+
+Accuracy: The accuracy of a classifier is the percentage of the test set records that are correctly classified by the classifier.
+
+Sensitivity: Sensitivity is also referred to as True positive rate, i.e. the proportion of positive records that are correctly identified.
+
+Precision: precision is defined as the proportion of the true positives against all the positive results (both true positives and false positives)
+
+Specificity: Specificity is the True negative rate that is the proportion of negative records that are correctly identified
+
+In this report, I will try to apply leaner regression, knn, random forest, loess, and ensemble models to predict the presence of liver daises using the Indian liver disease data set.
+
+## Method
+
+I have downloaded the data set from The UCL Machine Learning Repository and cleaned it to remove rows with missing values. Missing data can interfere with the models and may result in errors or wrong results. Once the cleaning was done, data explorations were done to get familiar with the data set and identify further required data preparation.
+
+## Analysis and results
+
+First of all, I have loaded the required libraries for the analysis.
+
+```{r}
+library(readr)
+library(tidyverse)
+library(psych)
+library(ggplot2)
+library(patchwork)
+library(dplyr) 
+library(caret) 
+library(reshape2)
+library(gridExtra)
+library(ggcorrplot)
+```
+
+Next, I have downloaded the liver disease data set from the UCL Machine Learning Repository website.
+
+```{r}
+# Download and load the data set
+
+URL <- "https://archive.ics.uci.edu/ml/machine-learning-databases/00225/Indian%20Liver%20Patient%20Dataset%20(ILPD).csv"
+liver <- read_csv(URL, col_names = FALSE)
+
+
+
+```
+
+This data set does not contain the column names attached to it. Therefore, I have named the columns as follows.
+
+```{r}
+# name the data columns
+colnames(liver) <- c("Age", "Gender", "totalBilirubin", "directBilirubin", "totalProteins", "Albumin"
+                     ,"AGratio", "SGPT", "SGOT", "Alkphos", "Disease")
+```
+
+Now let's look at the structure of the data set
+
+```{r}
+# view the structure of the data set
+str(liver)
+```
+
+Here we could see that all the columns are numerical (double) except the gender column, which is character.
+
+Then I examined the basic statistics for the data set variables. Here, I have used the describe() method of the psych package.
+
+```{r}
+# describe the data set variables.
+describe(liver)
+
+```
+
+According to the basic statistics generated by the psych package, we can see that the mean age of the patient in the sample is 44.75 years. Total proteins, albumin and has a very wide range and skewed.
+
+
+### Data cleaning
+
+It is important to clean the data set before any analysis. Let's see whether there are any missing values and, if yes, remove them. Those missing values can affect the analysis adversely.
+
+```{r}
+# check for missing values
+liver[rowSums(is.na(liver))!= 0,]
+
+# remove column which has missing values
+liver <- na.omit(liver)
+```
+
+There were four rows with missing values. I have removed them from the data set.
+
+### Data preperation
+
+Some of the algorithms may not work well with the character data. Therefore, I have converted the Gender variable to numeric as follows.
+
+```{r}
+# convert gender to numeric factor
+liver$Gender[liver$Gender=='Male']<- 1
+liver$Gender[liver$Gender=='Female']<- 2
+liver$Gender <- as.factor(liver$Gender)
+```
+
+In the data set, disease states was marked as 1 for presence and 2 for not presence. I have converted the variable to binary by replacing the value 2 with 0.
+
+```{r}
+# convert predictor variable to binary
+liver$Disease[liver$Disease==2]<- 0
+liver$Disease <- as.factor(liver$Disease)
+
+```
+
+### Data exploration
+
+Then I tried to visualize the distribution of the numerical variable.
+
+```{r}
+ph1 <- liver %>% ggplot(aes(x=Age)) +
+    geom_histogram(binwidth=5)+
+  labs(title = "Age", y = "Count")
+
+
+ph2 <- liver %>% ggplot(aes(x=totalBilirubin)) +
+    geom_histogram()+
+  labs(title = "totalBilirubin", y = "Count")
+
+
+ph3 <- liver %>% ggplot(aes(x=directBilirubin)) +
+    geom_histogram()+
+  labs(title = "directBilirubin", y = "Count")
+
+
+ph4 <- liver %>% ggplot(aes(x=SGOT)) +
+    geom_histogram()+
+  labs(title = "SGOT", y = "Count")
+
+
+ph5 <- liver %>% ggplot(aes(x=SGPT)) +
+    geom_histogram()+
+  labs(title = "SGPT", y = "Count")
+
+
+ph6 <- liver %>% ggplot(aes(x=totalProteins)) +
+    geom_histogram()+
+  labs(title = "totalProteins", y = "Count")
+
+
+ph7 <- liver %>% ggplot(aes(x=Albumin)) +
+    geom_histogram()+
+  labs(title = "Albumin", y = "Count")
+
+
+ph8 <- liver %>% ggplot(aes(x=AGratio)) +
+    geom_histogram()+
+  labs(title = "AGratio", y = "Count")
+
+ph9 <- liver %>% ggplot(aes(x=Alkphos)) +
+    geom_histogram()+
+  labs(title = "Alkphos", y = "Count")
+
+
+```
+
+I arranged the charts as follows for easy visualizing.
+
+```{r}
+(ph1|ph2|ph3)/(ph4|ph5|ph6)/(ph7|ph8|ph9)
+```
+
+Age, SGOT, SGPT and Alkaline phosphatase are almost normally distributed. However, other variables are not normally distributed and very skewed. 
+
+
+Next, I looked at how the values were distributed in columns for each disease status using box plots.
+
+```{r echo=TRUE}
+pb1 <- liver %>% ggplot(aes(x= as.factor(Disease), y=Age)) + 
+    geom_boxplot(fill="slateblue", alpha=0.2) + 
+    xlab("Disease")
+
+pb2 <- liver %>% ggplot(aes(x= as.factor(Disease), y=totalBilirubin)) + 
+    geom_boxplot(fill="slateblue", alpha=0.2) + 
+    xlab("Disease")
+
+pb3 <- liver %>% ggplot(aes(x= as.factor(Disease), y=directBilirubin)) + 
+    geom_boxplot(fill="slateblue", alpha=0.2) + 
+    xlab("Disease")
+
+pb4 <- liver %>% ggplot(aes(x= as.factor(Disease), y=SGOT)) + 
+    geom_boxplot(fill="slateblue", alpha=0.2) + 
+    xlab("Disease")
+
+pb5 <- liver %>% ggplot(aes(x= as.factor(Disease), y=SGPT)) + 
+    geom_boxplot(fill="slateblue", alpha=0.2) + 
+    xlab("Disease")
+
+pb6 <- liver %>% ggplot(aes(x= as.factor(Disease), y=totalProteins)) + 
+    geom_boxplot(fill="slateblue", alpha=0.2) + 
+    xlab("Disease")
+
+pb7 <- liver %>% ggplot(aes(x= as.factor(Disease), y=Albumin)) + 
+    geom_boxplot(fill="slateblue", alpha=0.2) + 
+    xlab("Disease")
+
+pb8 <- liver %>% ggplot(aes(x= as.factor(Disease), y=AGratio)) + 
+    geom_boxplot(fill="slateblue", alpha=0.2) + 
+    xlab("Disease")
+
+pb9 <- liver %>% ggplot(aes(x= as.factor(Disease), y=Alkphos)) + 
+    geom_boxplot(fill="slateblue", alpha=0.2) + 
+    xlab("Disease")
+
+
+(pb1|pb2|pb3)/(pb4|pb5|pb6)/(pb7|pb8|pb9)
+```
+
+The following graphs show the change of values by disease status.
+
+```{r eval=FALSE, include=FALSE}
+p1 <- liver %>%
+  ggplot(aes(Gender, fill = Disease)) +
+  geom_bar() +
+  labs(title = "Gender", y = "Number of Patients")
+
+p2 <- liver %>%
+  ggplot(aes(Age, fill = Disease)) +
+  geom_bar() +
+  labs(title = "Age", y = "Number of Patients") 
+
+p3 <- liver %>%
+  ggplot(aes(totalBilirubin, fill = Disease)) +
+  geom_bar() +
+  labs(title = "Total Bilirubin", y = "Number of Patients")
+
+p4 <- liver %>%
+  ggplot(aes(directBilirubin, fill = Disease)) +
+  geom_bar() +
+  labs(title = "Direct Bilirubin", y = "Number of Patients") 
+
+p5 <- liver %>%
+  ggplot(aes(SGOT, fill = Disease)) +
+  geom_bar() +
+  labs(title = "SGOT", y = "Number of Patients")
+
+p6 <- liver %>%
+  ggplot(aes(SGPT, fill = Disease)) +
+  geom_bar() +
+  labs(title = "SGPT", y = "Number of Patients") 
+
+p7 <- liver %>%
+  ggplot(aes(totalProteins, fill = Disease)) +
+  geom_bar() +
+  labs(title = "Total protines", y = "Number of Patients")
+
+p8 <- liver %>%
+  ggplot(aes(Albumin, fill = Disease)) +
+  geom_bar() +
+  labs(title = "Albumin", y = "Number of Patients") 
+
+p9 <- liver %>%
+  ggplot(aes(AGratio, fill = Disease)) +
+  geom_bar() +
+  labs(title = "Albumin Globumin ratio", y = "Number of Patients")
+
+p10 <- liver %>%
+  ggplot(aes(Alkphos, fill = Disease)) +
+  geom_bar() +
+  labs(title = "Alkaline phostate", y = "Number of Patients") 
+
+```
+
+```{r eval=FALSE, include=FALSE}
+(p1|p2)
+(p3 |p4)
+(p5|p6)
+(p7|p8) 
+(p9| p10)
+
+```
+
+### Predictor variable analysis
+
+Here I tried to identify the relationship between each variable using a correlation matrix.
+
+```{r}
+# calculate the correlations of variables without Gender and Disease Status
+correlations <- cor(liver[,c(-2,-11)])
+correlations
+
+```
+
+Let's visualize it with a correlation plot.
+
+```{r}
+ggcorrplot(correlations, hc.order = TRUE, type = "lower",  lab = TRUE)
+```
+
+### Removing the highly correlated variables
+
+The highly correlated variable can drive the analysis to one side and can give biased results. Therefore, to get the best performance, we need to remove these highly correlated variables from the analysis.
+
+```{r}
+# find highly correlated variables
+high_coor_cols <- findCorrelation(correlations, cutoff = 0.7, names = TRUE)
+high_coor_cols
+
+# remove highly correlated data
+liver_data <- liver[, !names(liver) %in% high_coor_cols]
+dim(liver_data)
+```
+
+Here, we can see that the SGOT, directBilirubin and AGratio are highly correlated. I have removed those variables from the data set.
+
+### Dividing the data set into training and test data set
+
+I have divided the data set into training and testing sets. 80% of the data were taken as a training set and 20% for the testing.
+
+```{r}
+# set a seed
+set.seed(2021)
+# split data set into train and test
+index <- createDataPartition(liver_data$Disease, p = 0.8, list = FALSE)
+train = liver_data[index,]
+test = liver_data[-index,]
+dim(train)
+dim(test)
+```
+
+I got `r nrow(train)` patients for training and `r nrow(test)` for testing.
+
+### Logistic regression
+
+```{r}
+# Logistic Regression - GLM
+# set seed
+set.seed(2021)
+# fit/train the model
+model1_glm_fit <- train(Disease ~., data = train, method = "glm", family = "binomial")
+
+# predict outcomes on test
+model1_glm_pred <- predict(model1_glm_fit, test)
+# confusion matrix
+model1_cm <- confusionMatrix(model1_glm_pred, test$Disease)
+model1_cm
+# model accuracy
+model1_acc <- model1_cm$overall["Accuracy"]
+model1_sen <- model1_cm$byClass["Sensitivity"]
+model1_spe <- model1_cm$byClass["Specificity"]
+model1_pre <- model1_cm$byClass["Precision"]
+model1_acc
+```
+
+### knn classification
+
+```{r}
+# knn
+# set seed
+set.seed(2021)
+# fit/train the model
+model2_knn_fit <- train(Disease ~ ., data = train, method = "knn")
+
+# predict outcomes on test
+model2_knn_pred <- predict(model2_knn_fit, test)
+# confusion matrix
+model2_cm <- confusionMatrix(model2_knn_pred, test$Disease)
+model2_cm
+# model accuracy
+model2_acc <- model2_cm$overall["Accuracy"]
+model2_sen <- model2_cm$byClass["Sensitivity"]
+model2_spe <- model2_cm$byClass["Specificity"]
+model2_pre <- model2_cm$byClass["Precision"]
+model2_acc
+```
+
+### Random forest
+
+```{r}
+# Random Forest
+# set seed
+set.seed(2021)
+# fit/train the model
+model3_rf = train(Disease ~ ., method = "rf", data = train, prox = TRUE)
+
+# predict outcomes on test
+model3_pred <- predict(model3_rf, test)
+# confusion matrix
+model3_cm <- confusionMatrix(model3_pred, test$Disease)
+model3_cm
+# model accuracy
+model3_acc <- model3_cm$overall["Accuracy"]
+model3_sen <- model3_cm$byClass["Sensitivity"]
+model3_spe <- model3_cm$byClass["Specificity"]
+model3_pre <- model3_cm$byClass["Precision"]
+model3_acc
+
+
+```
+
+### Naive Bayes classification 
+
+```{r}
+# Naive Bayes
+# set seed
+set.seed(2021)
+# fit/train the model
+model4_nb_fit <- train(Disease ~ ., data = train, method = "nb")
+
+
+# predict outcomes on test
+model4_nb_pred <- predict(model4_nb_fit, test)
+# confusion matrix
+model4_cm <- confusionMatrix(model4_nb_pred, test$Disease)
+model4_cm
+# model accuracy
+model4_acc <- model4_cm$overall["Accuracy"]
+model4_sen <- model4_cm$byClass["Sensitivity"]
+model4_spe <- model4_cm$byClass["Specificity"]
+model4_pre <- model4_cm$byClass["Precision"]
+model4_acc
+```
+
+### Generalized Additive Model using LOESS
+
+```{r}
+# gamLoess
+# set seed
+set.seed(2021)
+# fit/train the model
+model5_nb_fit <- train(Disease ~ ., data = train, method = "gamLoess")
+#model5_nb_fit
+
+# predict outcomes on test
+model5_nb_pred <- predict(model5_nb_fit, test)
+# confusion matrix
+model5_cm <- confusionMatrix(model5_nb_pred, test$Disease)
+model5_cm
+# model accuracy
+model5_acc <- model5_cm$overall["Accuracy"]
+model5_sen <- model5_cm$byClass["Sensitivity"]
+model5_spe <- model5_cm$byClass["Specificity"]
+model5_pre <- model5_cm$byClass["Precision"]
+model5_acc
+```
+
+Now let's see the accuracies got from each machine learning algorithm.
+
+```{r}
+# Overview accuracy
+# create table with accuracies overview
+tibble(method = c("glm", "knn", "random forest","naive bayes","gamLoess"),
+       Accuracy = c(model1_acc, model2_acc, model3_acc, model4_acc, model5_acc),
+       Sensitivity = c(model1_sen, model2_sen, model3_sen, model4_sen, model5_sen),
+       Specificity = c(model1_spe, model2_spe, model3_spe, model4_spe, model5_spe),
+       Precision = c(model1_pre, model2_pre, model3_pre, model4_pre, model5_pre))
+```
+
+The generalized linear regression model gave the best accuracy out of the five classification models. 
+
+
+### Ensemble
+
+```{r echo=TRUE, results='hide'}
+# Ensembler
+# list of models
+models <- c("glm", "naive_bayes",  "svmLinear", "gamLoess",
+            "knn","rf", "avNNet", "nnet" )
+
+# set seed
+set.seed(2021)
+# fit/train models
+fits <- lapply(models, function(model){ 
+  # print(model)
+  train(Disease ~ ., method = model, data = train)
+}) 
+
+# predict with each model
+fits_predicts <- sapply(fits, function(fits){
+  predict(fits, test) 
+})
+
+# calculate accuracies for each model
+acc <- colMeans(fits_predicts == test$Disease)
+#acc
+
+# obtain mean score of predictions
+votes <- rowMeans(fits_predicts == 1)
+# accumulated voting, below mean of 0.5 vote is 0
+y_hat <- ifelse(votes > 0.5, 1, 0)
+# ensembler accuracy mean is mean of accumulated votes accuracy
+ensembler_mean <- mean(y_hat == test$Disease)
+
+
+# which individual models are better than the ensembler mean
+better <- ensembler_mean < acc
+
+```
+
+Mean of ensemble evaluation
+
+```{r}
+
+ensembler_mean
+acc[which(better==T)]
+```
+
+## Discussion and conlusion
+
+This report contains the performance evaluation of several machine learning algorithms using the Indian Liver Patient data set and the cleaning, pre-processing, visualizations, and feature selection required to build better performing models. This project aimed to determine which algorithm among logistic regression, knn, loess, random forest, Naive Bayes and ensemble gives the best prediction accuracy. I got the highest accuracy for the generalized linear regression model, which was 0.73. However, the sensitivity is low. All the models seem to have high specificity but low sensitivity. The ensemble method uses several learning algorithms and gives the mean value. It did not show a higher precision than glm method. We can see that 71.5% of patients have disease in the data set. Even if a physician guess the patient has the condition every time, he is accurate 71.5% of the time. The glm algorithm performed very slightly better than guessing.  
+
+We can see that the data set is not balanced as there is a very high number of liver patients than healthy patients. In reality, there are more healthy people than people with liver disease. The high specificity could be due to the unbalanced nature of the data set. I think the models are not suitable in real-life situations due to the unbalanced data set.
+
+However, the data set is an excellent resource for learning machine learning for people like me. Overall, this analysis has offered me many new insights into machine learning, particularly into classification predictions. My knowledge is still too limited and narrow to fully grasp all the possibilities and paths I could have taken in the analysis.
+
+In conclusion, I would like to say a big thank you to our teacher as well as other supporting teachers for opening up my eyes to this vast expanse of the new and exciting domain. My next step is to continue learning and return to this report and try to make it better one day.
+
+
+## References
+
+1. Dua, D. and Graff, C. (2019). UCI Machine Learning Repository [http://archive.ics.uci.edu/ml]. Irvine, CA: University of California, School of Information and Computer Science. 
+
